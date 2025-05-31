@@ -19,8 +19,21 @@ else:
 
 # Configuration
 DATA_DIR = 'data/'
-MODEL = 'bert-base-uncased'
-DATASET = {'amazon_combined': {'path': 'amazon_combined_train.csv', 'num_labels': 3}}
+MODELS = {
+    'bert': 'bert-base-uncased',
+    'distilbert': 'distilbert-base-uncased',
+    'roberta': 'roberta-base',
+    'albert': 'albert-base-v2',
+    'gpt2': 'gpt2',
+    't5': 't5-small',
+    'xlnet': 'xlnet-base-cased',
+    'electra': 'electra-small-discriminator'
+}
+DATASETS = {
+    'amazon_combined': {'path': 'amazon_combined_train.csv', 'num_labels': 3},
+    'sentiment140': {'path': 'sentiment140_train.csv', 'num_labels': 2},
+    'reddit': {'path': 'reddit_train.csv', 'num_labels': 3}
+}
 OUTPUT_DIR = 'models/'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -34,7 +47,7 @@ def compute_metrics(pred):
 
 # Load and prepare dataset
 def load_dataset(dataset_name, split='train'):
-    path = os.path.join(DATA_DIR, DATASET[dataset_name]['path'].replace('train', split))
+    path = os.path.join(DATA_DIR, DATASETS[dataset_name]['path'].replace('train', split))
     df = pd.read_csv(path)
     # Clean text column
     df['text'] = df['text'].fillna('').astype(str)
@@ -60,7 +73,7 @@ def train_model(model_name, dataset_name, output_dir):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name, 
-        num_labels=DATASET[dataset_name]['num_labels']
+        num_labels=DATASETS[dataset_name]['num_labels']
     )
     
     # Move model to GPU if available
@@ -80,7 +93,7 @@ def train_model(model_name, dataset_name, output_dir):
     
     # Training arguments
     training_args = TrainingArguments(
-        output_dir=os.path.join(output_dir, f"bert_{dataset_name}"),
+        output_dir=os.path.join(output_dir, f"{model_name}_{dataset_name}"),
         evaluation_strategy='steps',
         eval_steps=2000,
         save_strategy='steps',
@@ -115,24 +128,26 @@ def train_model(model_name, dataset_name, output_dir):
     logging.info(f"Training completed for {model_name} on {dataset_name}")
     
     # Save final output
-    with open(os.path.join(output_dir, 'final_output.txt'), 'w') as f:
+    with open(os.path.join(output_dir, 'final_output.txt'), 'a') as f:
         f.write(f"Training completed for {model_name} on {dataset_name}\n")
-        f.write(f"{train_result.metrics}\n")
+        f.write(f"{train_result.metrics}\n\n")
     
     # Save metrics
     metrics = trainer.evaluate()
-    with open(os.path.join(output_dir, 'metrics.txt'), 'w') as f:
+    with open(os.path.join(output_dir, 'metrics.txt'), 'a') as f:
         f.write(f"Validation metrics for {model_name} on {dataset_name}\n")
-        f.write(f"{metrics}\n")
+        f.write(f"{metrics}\n\n")
     
     # Save model and tokenizer
-    trainer.save_model(os.path.join(output_dir, f"bert_{dataset_name}"))
-    tokenizer.save_pretrained(os.path.join(output_dir, f"bert_{dataset_name}"))
+    trainer.save_model(os.path.join(output_dir, f"{model_name}_{dataset_name}"))
+    tokenizer.save_pretrained(os.path.join(output_dir, f"{model_name}_{dataset_name}"))
     
     return trainer
 
 if __name__ == "__main__":
-    try:
-        trainer = train_model(MODEL, 'amazon_combined', OUTPUT_DIR)
-    except Exception as e:
-        logging.error(f"Error training bert on amazon_combined: {str(e)}")
+    for model_name in MODELS:
+        for dataset_name in DATASETS:
+            try:
+                trainer = train_model(model_name, dataset_name, OUTPUT_DIR)
+            except Exception as e:
+                logging.error(f"Error training {model_name} on {dataset_name}: {str(e)}")
